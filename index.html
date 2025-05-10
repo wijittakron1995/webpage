@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบันทึกเวลาปฏิบัติราชการ (TimeTrack)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        // ใส่ Base64 ของฟอนต์ THSarabun ที่นี่
+        // หมายเหตุ: คุณจำเป็นต้องมีไฟล์ THSarabunIT9.ttf และ THSarabunIT9Bold.ttf
+        // จากนั้นแปลงไฟล์เหล่านี้เป็น Base64 string แล้วนำมาใส่ในตัวแปรด้านล่าง
+        // ตัวอย่าง: const thSarabunIT9Base64 = 'data:font/truetype;charset=utf-8;base64,AAEAAA...';
+        const thSarabunIT9Base64 = null; 
+        const thSarabunIT9BoldBase64 = null; 
+    </script>
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif; /* ใช้ฟอนต์ Nunito ทั้งหน้า */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .form-input {
+            @apply mt-1 block w-full px-4 py-3 bg-white/80 border border-pink-300 rounded-xl text-sm shadow-sm placeholder-slate-400
+            focus:outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-400
+            transition duration-150 ease-in-out;
+        }
+        .btn-primary {
+            @apply px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold text-lg rounded-xl shadow-lg hover:from-purple-600 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-opacity-75 transition duration-150 ease-in-out transform hover:scale-105;
+        }
+        .card {
+            @apply bg-white/70 backdrop-blur-lg p-8 md:p-10 rounded-2xl shadow-2xl; /* เพิ่มความโปร่งแสงและ blur */
+        }
+        .file-input-styled::-webkit-file-upload-button {
+            @apply mr-4 py-2 px-4 rounded-lg border-0 text-sm font-semibold bg-pink-100 text-pink-700 hover:bg-pink-200 cursor-pointer transition duration-150 ease-in-out;
+            visibility: hidden; /* Hide default button */
+        }
+        .file-input-styled::before {
+            content: 'เลือกไฟล์โลโก้';
+            @apply inline-block mr-4 py-2 px-5 rounded-lg border-0 text-sm font-semibold bg-pink-100 text-pink-600 hover:bg-pink-200 cursor-pointer transition duration-150 ease-in-out;
+        }
+        .file-input-styled:hover::before {
+            @apply bg-pink-200;
+        }
+        .file-input-styled:focus-within::before {
+             @apply ring-2 ring-pink-500 ring-opacity-50;
+        }
+
+    </style>
+</head>
+<body class="bg-gradient-to-br from-sky-100 via-rose-100 to-amber-100 min-h-screen flex flex-col items-center justify-center p-4 selection:bg-pink-300 selection:text-white">
+
+    <div id="app" class="container mx-auto max-w-2xl w-full">
+        <div class="card">
+            <div class="text-center mb-10">
+                <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 pb-2">
+                    ระบบบันทึกเวลา
+                </h1>
+                <p class="text-slate-600 mt-2 text-lg">สร้างไฟล์ PDF บัญชีลงเวลาปฏิบัติราชการ</p>
+            </div>
+
+            <form @submit.prevent="generatePdf" class="space-y-7">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="schoolName" class="block text-sm font-semibold text-slate-700 mb-1">ชื่อโรงเรียน:</label>
+                        <input type="text" id="schoolName" v-model="formData.schoolName" class="form-input" required placeholder="กรอกชื่อโรงเรียน">
+                    </div>
+                    <div>
+                        <label for="affiliation" class="block text-sm font-semibold text-slate-700 mb-1">สังกัด:</label>
+                        <input type="text" id="affiliation" v-model="formData.affiliation" class="form-input" required placeholder="กรอกสังกัด">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="inspectorName" class="block text-sm font-semibold text-slate-700 mb-1">ชื่อผู้ตรวจสอบ:</label>
+                    <input type="text" id="inspectorName" v-model="formData.inspectorName" class="form-input" placeholder="เช่น นายวิจิตกรณ์ อ่อนโก้ก" required>
+                </div>
+                 <div>
+                    <label for="inspectorPosition" class="block text-sm font-semibold text-slate-700 mb-1">ตำแหน่งผู้ตรวจสอบ:</label>
+                    <input type="text" id="inspectorPosition" v-model="formData.inspectorPosition" class="form-input" placeholder="เช่น หัวหน้ากลุ่มบริหารงานบุคคล" required>
+                </div>
+                
+                <div>
+                    <label for="approverName" class="block text-sm font-semibold text-slate-700 mb-1">ชื่อผู้รับรอง:</label>
+                    <input type="text" id="approverName" v-model="formData.approverName" class="form-input" placeholder="เช่น นางสาววิไลวัลย์ พรหมมา" required>
+                </div>
+                <div>
+                    <label for="approverPosition" class="block text-sm font-semibold text-slate-700 mb-1">ตำแหน่งผู้รับรอง:</label>
+                    <input type="text" id="approverPosition" v-model="formData.approverPosition" class="form-input" placeholder="เช่น ผู้อำนวยการโรงเรียน" required>
+                </div>
+
+                <div>
+                    <label for="schoolLogo" class="block text-sm font-semibold text-slate-700 mb-1">โลโก้โรงเรียน:</label>
+                    <div class="flex items-center space-x-4">
+                        <input type="file" id="schoolLogo" @change="handleLogoUpload" accept="image/*" class="file-input-styled w-full text-sm text-slate-500">
+                    </div>
+                     <img v-if="formData.schoolLogo" :src="formData.schoolLogo" alt="School Logo Preview" class="mt-3 h-24 w-24 object-contain rounded-lg shadow-md border border-pink-200 p-1">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="month" class="block text-sm font-semibold text-slate-700 mb-1">เลือกเดือน:</label>
+                        <select id="month" v-model="selectedMonth" class="form-input">
+                            <option v-for="(month, index) in months" :key="index" :value="index + 1">{{ month }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="year" class="block text-sm font-semibold text-slate-700 mb-1">เลือกปี พ.ศ.:</label>
+                        <select id="year" v-model="selectedYear" class="form-input">
+                            <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="text-center pt-6">
+                    <button type="submit" class="btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 inline-block mr-2 align-middle">
+                            <path fill-rule="evenodd" d="M12 2.25a.75.75 0 01.75.75v11.69l3.22-3.22a.75.75 0 111.06 1.06l-4.5 4.5a.75.75 0 01-1.06 0l-4.5-4.5a.75.75 0 111.06-1.06l3.22 3.22V3a.75.75 0 01.75-.75zm-9 13.5a.75.75 0 01.75.75v2.25a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5V16.5a.75.75 0 011.5 0v2.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V16.5a.75.75 0 01.75-.75z" clip-rule="evenodd" />
+                        </svg>
+                        สร้างไฟล์ PDF
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <footer class="text-center mt-10 mb-6">
+            <p class="text-sm text-slate-700/80">
+                พัฒนาโดย: นายวิจิตกรณ์ อ่อนโก้ก<br>
+                ครูโรงเรียนยิ่งยวดพิทยานุกูล<br>
+                สำนักงานเขตพื้นที่การศึกษามัธยมศึกษาอุดรธานี
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, onMounted, computed } = Vue;
+        const { jsPDF } = window.jspdf; 
+
+        createApp({
+            setup() {
+                const formData = reactive({
+                    schoolName: '',
+                    affiliation: '',
+                    inspectorName: '',
+                    inspectorPosition: '',
+                    approverName: '',
+                    approverPosition: '',
+                    schoolLogo: null, 
+                });
+
+                const months = [
+                    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+                ];
+                const currentYearBE = new Date().getFullYear() + 543;
+                const years = Array.from({ length: 10 }, (_, i) => currentYearBE - 5 + i); 
+
+                const selectedMonth = ref(new Date().getMonth() + 1);
+                const selectedYear = ref(currentYearBE);
+
+                const loadDataFromLocalStorage = () => {
+                    const savedData = localStorage.getItem('timeTrackFormData');
+                    if (savedData) {
+                        const parsedData = JSON.parse(savedData);
+                        Object.assign(formData, parsedData);
+                    }
+                };
+
+                const saveDataToLocalStorage = () => {
+                    localStorage.setItem('timeTrackFormData', JSON.stringify(formData));
+                };
+
+                onMounted(() => {
+                    loadDataFromLocalStorage();
+                });
+
+                Vue.watch(formData, saveDataToLocalStorage, { deep: true });
+
+                const handleLogoUpload = (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            formData.schoolLogo = e.target.result; 
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        formData.schoolLogo = null;
+                    }
+                };
+
+                const toThaiNumeral = (num) => {
+                    const thaiNumerals = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+                    return String(num).replace(/[0-9]/g, (d) => thaiNumerals[parseInt(d)]);
+                };
+
+                const getThaiMonthName = (monthNumber) => { 
+                    return months[monthNumber - 1] || '';
+                };
+                
+                const getThaiDayOfWeek = (year, month, day) => { 
+                    const date = new Date(year - 543, month - 1, day);
+                    const thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+                    return thaiDays[date.getDay()];
+                };
+
+                const getDaysInMonth = (year, month) => { 
+                    return new Date(year - 543, month, 0).getDate();
+                };
+
+                const generatePdf = async () => {
+                    if (!formData.schoolName || !formData.affiliation || !formData.inspectorName || !formData.inspectorPosition || !formData.approverName || !formData.approverPosition) {
+                        alert("กรุณากรอกข้อมูลให้ครบถ้วนก่อนสร้าง PDF");
+                        return;
+                    }
+
+                    const doc = new jsPDF({
+                        orientation: 'p',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+
+                    const FONT_NORMAL = 'Sarabun-Regular';
+                    const FONT_BOLD = 'Sarabun-Bold';
+
+                    if (thSarabunIT9Base64 && thSarabunIT9BoldBase64) {
+                        try {
+                            // การแปลง Base64 string ต้องตัดส่วน 'data:font/truetype;charset=utf-8;base64,' ออกก่อน
+                            const normalFontBase64Data = thSarabunIT9Base64.includes(',') ? thSarabunIT9Base64.split(',')[1] : thSarabunIT9Base64;
+                            const boldFontBase64Data = thSarabunIT9BoldBase64.includes(',') ? thSarabunIT9BoldBase64.split(',')[1] : thSarabunIT9BoldBase64;
+
+                            doc.addFileToVFS('THSarabunIT9.ttf', normalFontBase64Data);
+                            doc.addFont('THSarabunIT9.ttf', FONT_NORMAL, 'normal');
+
+                            doc.addFileToVFS('THSarabunIT9Bold.ttf', boldFontBase64Data);
+                            doc.addFont('THSarabunIT9Bold.ttf', FONT_BOLD, 'normal'); 
+                            console.log("THSarabun fonts registered successfully.");
+                        } catch (e) {
+                            console.error("Error registering THSarabun fonts:", e);
+                            alert("เกิดข้อผิดพลาดในการโหลดฟอนต์ THSarabun อาจต้องตรวจสอบ Base64 หรือไฟล์ฟอนต์");
+                            doc.setFont('Helvetica', 'normal');
+                        }
+                    } else {
+                        console.warn("THSarabun font base64 strings not provided. Using Helvetica.");
+                        alert("ไม่พบข้อมูลฟอนต์ THSarabun ระบบจะใช้ฟอนต์มาตรฐาน Helvetica ซึ่งอาจทำให้รูปแบบไม่ถูกต้อง");
+                        doc.setFont('Helvetica', 'normal'); 
+                    }
+                    
+                    const setFontSarabun = (type = 'normal', size = 16) => {
+                        if (thSarabunIT9Base64 && thSarabunIT9BoldBase64) {
+                            doc.setFont(type === 'bold' ? FONT_BOLD : FONT_NORMAL);
+                        } else {
+                             doc.setFont('Helvetica', type === 'bold' ? 'bold' : 'normal');
+                        }
+                        doc.setFontSize(size);
+                    };
+
+                    // --- 1. Cover Page ---
+                    setFontSarabun('bold', 18);
+                    const coverTitle = 'บัญชีลงเวลาการปฏิบัติราชการ';
+                    const coverTitleWidth = doc.getStringUnitWidth(coverTitle) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(coverTitle, (doc.internal.pageSize.getWidth() - coverTitleWidth) / 2, 40);
+
+                    setFontSarabun('normal', 16);
+                    const coverSubtitle = 'ของข้าราชการครูและบุคลากรทางการศึกษา';
+                    const coverSubtitleWidth = doc.getStringUnitWidth(coverSubtitle) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(coverSubtitle, (doc.internal.pageSize.getWidth() - coverSubtitleWidth) / 2, 50);
+
+                    if (formData.schoolLogo) {
+                        try {
+                            const img = new Image();
+                            img.src = formData.schoolLogo;
+                            await new Promise(resolve => {
+                                img.onload = resolve;
+                                img.onerror = () => { // Handle image loading error
+                                    console.error("Image failed to load for PDF.");
+                                    resolve(); // Resolve promise to continue PDF generation
+                                };
+                            });
+                            
+                            if (img.complete && img.naturalWidth !== 0) { // Check if image loaded successfully
+                                const logoWidth = 30; 
+                                const logoHeight = (img.height * logoWidth) / img.width;
+                                const logoX = (doc.internal.pageSize.getWidth() - logoWidth) / 2;
+                                doc.addImage(formData.schoolLogo, 'PNG', logoX, 60, logoWidth, logoHeight); 
+                            } else {
+                                setFontSarabun('normal', 10);
+                                doc.text("ไม่สามารถโหลดโลโก้ได้", (doc.internal.pageSize.getWidth() - doc.getStringUnitWidth("ไม่สามารถโหลดโลโก้ได้")*10/doc.internal.scaleFactor)/2, 75);
+                            }
+                        } catch (e) {
+                            console.error("Error adding logo to PDF:", e);
+                            setFontSarabun('normal', 10);
+                            doc.text("ไม่สามารถโหลดโลโก้ได้", (doc.internal.pageSize.getWidth() - doc.getStringUnitWidth("ไม่สามารถโหลดโลโก้ได้")*10/doc.internal.scaleFactor)/2, 75);
+                        }
+                    } else {
+                         setFontSarabun('normal', 10);
+                         doc.text("(ไม่มีโลโก้)", (doc.internal.pageSize.getWidth() - doc.getStringUnitWidth("(ไม่มีโลโก้)")*10/doc.internal.scaleFactor)/2, 75);
+                    }
+                    
+                    setFontSarabun('normal', 16);
+                    const monthYearText = `ประจำเดือน ${getThaiMonthName(selectedMonth.value)} พ.ศ. ${toThaiNumeral(selectedYear.value)}`;
+                    const monthYearTextWidth = doc.getStringUnitWidth(monthYearText) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(monthYearText, (doc.internal.pageSize.getWidth() - monthYearTextWidth) / 2, 110); 
+
+                    setFontSarabun('bold', 16);
+                    const schoolNameText = `โรงเรียน${formData.schoolName}`; 
+                    const schoolNameTextWidth = doc.getStringUnitWidth(schoolNameText) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(schoolNameText, (doc.internal.pageSize.getWidth() - schoolNameTextWidth) / 2, 150); 
+
+                    setFontSarabun('normal', 14);
+                    const affiliationText = formData.affiliation;
+                    const affiliationTextWidth = doc.getStringUnitWidth(affiliationText) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(affiliationText, (doc.internal.pageSize.getWidth() - affiliationTextWidth) / 2, 160); 
+
+                    setFontSarabun('normal', 12);
+                    const footerText1 = 'สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน';
+                    const footerText1Width = doc.getStringUnitWidth(footerText1) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(footerText1, (doc.internal.pageSize.getWidth() - footerText1Width) / 2, 170); 
+
+                    const footerText2 = 'กระทรวงศึกษาธิการ';
+                    const footerText2Width = doc.getStringUnitWidth(footerText2) * doc.getFontSize() / doc.internal.scaleFactor;
+                    doc.text(footerText2, (doc.internal.pageSize.getWidth() - footerText2Width) / 2, 178); 
+
+                    // --- 2. Timesheet Pages (One per day) ---
+                    const daysInSelectedMonth = getDaysInMonth(selectedYear.value, selectedMonth.value);
+                    const A4_WIDTH = doc.internal.pageSize.getWidth();
+                    const margin = 15; 
+
+                    for (let day = 1; day <= daysInSelectedMonth; day++) {
+                        doc.addPage();
+                        
+                        setFontSarabun('bold', 14);
+                        const pageTitle = 'บัญชีลงเวลาการปฏิบัติราชการของข้าราชการครูและบุคลากรทางการศึกษา';
+                        const pageTitleWidth = doc.getStringUnitWidth(pageTitle) * doc.getFontSize() / doc.internal.scaleFactor;
+                        doc.text(pageTitle, (A4_WIDTH - pageTitleWidth) / 2, margin + 5);
+
+                        setFontSarabun('normal', 12);
+                        const schoolNamePage = `โรงเรียน${formData.schoolName}`;
+                        const schoolNamePageWidth = doc.getStringUnitWidth(schoolNamePage) * doc.getFontSize() / doc.internal.scaleFactor;
+                        doc.text(schoolNamePage, (A4_WIDTH - schoolNamePageWidth) / 2, margin + 12);
+                        
+                        const affiliationPage = formData.affiliation;
+                        const affiliationPageWidth = doc.getStringUnitWidth(affiliationPage) * doc.getFontSize() / doc.internal.scaleFactor;
+                        doc.text(affiliationPage, (A4_WIDTH - affiliationPageWidth) / 2, margin + 18);
+
+                        setFontSarabun('normal', 12);
+                        const dateText = `วัน ${getThaiDayOfWeek(selectedYear.value, selectedMonth.value, day)} ที่ ${toThaiNumeral(day)} เดือน ${getThaiMonthName(selectedMonth.value)} พ.ศ. ${toThaiNumeral(selectedYear.value)}`;
+                        doc.text(dateText, margin, margin + 30); 
+
+                        const tableHeaders = [['ลำดับที่', 'ชื่อ-ชื่อสกุล\n(ตัวบรรจง)', 'เวลามา', 'ลายมือชื่อ', 'เวลากลับ', 'ลายมือชื่อ', 'หมายเหตุ']];
+                        const tableBody = [];
+                        for (let i = 1; i <= 20; i++) { 
+                            tableBody.push([toThaiNumeral(i)+'.', '', '', '', '', '', '']);
+                        }
+
+                        doc.autoTable({
+                            head: tableHeaders,
+                            body: tableBody,
+                            startY: margin + 38,
+                            theme: 'grid', 
+                            styles: {
+                                font: (thSarabunIT9Base64 && thSarabunIT9BoldBase64) ? FONT_NORMAL : 'Helvetica', 
+                                fontSize: 10,
+                                cellPadding: 1.5,
+                                halign: 'center',
+                                valign: 'middle',
+                                lineColor: [0, 0, 0], 
+                                lineWidth: 0.1,
+                            },
+                            headStyles: {
+                                fontStyle: (thSarabunIT9Base64 && thSarabunIT9BoldBase64) ? FONT_BOLD : 'bold', 
+                                fillColor: [230, 230, 230], 
+                                textColor: [0,0,0],
+                                halign: 'center',
+                                minCellHeight: 12 // เพิ่มความสูงเพื่อให้ข้อความสองบรรทัดแสดงได้
+                            },
+                            columnStyles: {
+                                0: { cellWidth: 15, halign: 'center' }, 
+                                1: { cellWidth: 55, halign: 'left' },    
+                                2: { cellWidth: 20, halign: 'center' }, 
+                                3: { cellWidth: 30, halign: 'left' },   
+                                4: { cellWidth: 20, halign: 'center' }, 
+                                5: { cellWidth: 30, halign: 'left' },   
+                                6: { cellWidth: 'auto', halign: 'left' } 
+                            },
+                            margin: { left: margin, right: margin }
+                        });
+                        
+                        let currentY = doc.lastAutoTable.finalY + 10;
+
+                        setFontSarabun('normal', 11);
+                        doc.text(`ข้าราชการครูและบุคลากรทางการศึกษาทั้งหมด ................................. คน`, margin, currentY);
+                        currentY += 7;
+                        doc.text(`มาปฏิบัติราชการ ................................. คน  ไปราชการ ................................. คน  ลาราชการ ................................. คน`, margin, currentY);
+                        currentY += 7;
+                        doc.text(`มาสาย ................................. คน  ไม่มาปฏิบัติราชการ ................................. คน`, margin, currentY);
+                        currentY += 15; 
+
+                        const signatureY = currentY;
+                        const signatureXInspector = margin + 10;
+                        const signatureXApprover = A4_WIDTH / 2 + margin /2;
+                        
+                        setFontSarabun('normal', 11); // Ensure font is set for signatures
+                        doc.text('ลงชื่อ ................................................ ผู้ตรวจสอบ', signatureXInspector, signatureY);
+                        currentY += 7;
+                        doc.text(`( ${formData.inspectorName || '................................................'} )`, signatureXInspector + 5, currentY);
+                        currentY += 7;
+                        doc.text(formData.inspectorPosition || '................................................', signatureXInspector + 5, currentY);
+
+                        currentY = signatureY; 
+                        doc.text('ลงชื่อ ................................................ ผู้รับรอง', signatureXApprover, signatureY);
+                        currentY += 7;
+                        doc.text(`( ${formData.approverName || '................................................'} )`, signatureXApprover + 5, currentY);
+                        currentY += 7;
+                        doc.text(formData.approverPosition || '................................................', signatureXApprover + 5, currentY);
+                    }
+
+                    const fileName = `บัญชีลงเวลา_${getThaiMonthName(selectedMonth.value)}_${selectedYear.value}.pdf`;
+                    doc.save(fileName);
+                    alert('สร้างไฟล์ PDF สำเร็จแล้ว!');
+                };
+
+                return {
+                    formData,
+                    months,
+                    years,
+                    selectedMonth,
+                    selectedYear,
+                    handleLogoUpload,
+                    generatePdf,
+                    toThaiNumeral, 
+                    getThaiMonthName 
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
